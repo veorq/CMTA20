@@ -34,7 +34,7 @@ abstract contract ERC20BurnModule is ERC20Upgradeable, ICCIPBurnFromERC20, Autho
         uint256 value,
         string calldata reason
     ) public onlyRole(BURNER_ROLE) {
-        _burn(account, value);
+        _burnCMTAT(account, value);
         emit Burn(account, value, reason);
     }
 
@@ -68,7 +68,7 @@ abstract contract ERC20BurnModule is ERC20Upgradeable, ICCIPBurnFromERC20, Autho
         }
         // No need of unchecked block since Soliditiy 0.8.22
         for (uint256 i = 0; i < accounts.length; ++i ) {
-            _burn(accounts[i], values[i]);
+            _burnCMTAT(accounts[i], values[i]);
             emit Burn(accounts[i], values[i], reason);
         }
     }
@@ -108,6 +108,10 @@ abstract contract ERC20BurnModule is ERC20Upgradeable, ICCIPBurnFromERC20, Autho
         emit Burn(account, value, "burnFrom");
         // Specific event for the operation
         emit BurnFrom(account, sender, value);
+    }
+
+    function _burnCMTAT(address account, uint256 value) internal virtual{
+         ERC20Upgradeable._burn(account, value);
     }
 
     uint256[50] private __gap;

@@ -5,6 +5,7 @@ pragma solidity ^0.8.20;
 import "../../../../openzeppelin-contracts-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol";
 import "../../security/AuthorizationModule.sol";
 import "../../../interfaces/ICCIPToken.sol";
+
 abstract contract ERC20MintModule is ERC20Upgradeable, ICCIPMintERC20, AuthorizationModule {
     // MintModule
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
@@ -32,7 +33,7 @@ abstract contract ERC20MintModule is ERC20Upgradeable, ICCIPMintERC20, Authoriza
      * - The caller must have the `MINTER_ROLE`.
      */
     function mint(address account, uint256 value) public onlyRole(MINTER_ROLE) {
-        _mint(account, value);
+        mintCMTAT(account, value);
         emit Mint(account, value);
     }
 
@@ -65,9 +66,13 @@ abstract contract ERC20MintModule is ERC20Upgradeable, ICCIPMintERC20, Authoriza
         }
         // No need of unchecked block since Soliditiy 0.8.22
         for (uint256 i = 0; i < accounts.length; ++i ) {
-            _mint(accounts[i], values[i]);
+            mintCMTAT(accounts[i], values[i]);
             emit Mint(accounts[i], values[i]);
         }
+    }
+
+    function mintCMTAT(address account, uint256 value) internal virtual{
+         ERC20Upgradeable._mint(account, value);
     }
 
     uint256[50] private __gap;
