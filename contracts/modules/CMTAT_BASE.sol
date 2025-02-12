@@ -3,28 +3,26 @@
 pragma solidity ^0.8.20;
 
 // required OZ imports here
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
-
-import "./wrapper/core/BaseModule.sol";
-import "./wrapper/core/ERC20BurnModule.sol";
-import "./wrapper/core/ERC20MintModule.sol";
-import "./wrapper/core/EnforcementModule.sol";
-import "./wrapper/core/ERC20BaseModule.sol";
-import "./wrapper/core/PauseModule.sol";
-/*
-* SnapshotModule:
-* Add this import in case you add the SnapshotModule
-*/
-import "./wrapper/extensions/ERC20SnapshotModule.sol";
-
-import "./wrapper/controllers/ValidationModule.sol";
-import "./wrapper/extensions/MetaTxModule.sol";
-import "./wrapper/extensions/DebtModule.sol";
-import "./wrapper/extensions/DocumentModule.sol";
-import "./security/AuthorizationModule.sol";
-import "../interfaces/ICMTATConstructor.sol";
-import "../libraries/Errors.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {ContextUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
+// Wrapper
+import {BaseModule} from "./wrapper/core/BaseModule.sol";
+import {ERC20BurnModule} from "./wrapper/core/ERC20BurnModule.sol";
+import {ERC20MintModule} from "./wrapper/core/ERC20MintModule.sol";
+import {EnforcementModule} from "./wrapper/core/EnforcementModule.sol";
+import {ERC20BaseModule, ERC20Upgradeable} from "./wrapper/core/ERC20BaseModule.sol";
+import {PauseModule} from "./wrapper/core/PauseModule.sol";
+import {ValidationModule} from "./wrapper/controllers/ValidationEngineModule.sol";
+import {MetaTxModule, ERC2771ContextUpgradeable} from "./wrapper/extensions/MetaTxModule.sol";
+import {DebtModule} from "./wrapper/extensions/DebtEngineModule.sol";
+import {DocumentModule} from "./wrapper/extensions/DocumentEngineModule.sol";
+import {SnapshotEngineModule} from "./wrapper/extensions/SnapshotEngineModule.sol";
+// Security
+import {AuthorizationModule} from "./security/AuthorizationModule.sol";
+// Interface and other library
+import {ICMTATConstructor} from "../interfaces/ICMTATConstructor.sol";
+import {ISnapshotEngine} from "../interfaces/engine/ISnapshotEngine.sol";
+import {Errors} from "../libraries/Errors.sol";
 
 abstract contract CMTAT_BASE is
     Initializable,
@@ -39,8 +37,8 @@ abstract contract CMTAT_BASE is
     ERC20BaseModule,
     // Extension
     MetaTxModule,
-    ERC20SnapshotModule,
     DebtModule,
+    SnapshotEngineModule,
     DocumentModule
 {   
 
@@ -79,62 +77,82 @@ abstract contract CMTAT_BASE is
         ICMTATConstructor.ERC20Attributes memory ERC20Attributes_,
         ICMTATConstructor.BaseModuleAttributes memory baseModuleAttributes_,
         ICMTATConstructor.Engine memory engines_ 
-    ) internal onlyInitializing {
+    ) internal virtual onlyInitializing {
         /* OpenZeppelin library */
         // OZ init_unchained functions are called firstly due to inheritance
         __Context_init_unchained();
-        __ERC20_init_unchained(ERC20Attributes_.nameIrrevocable, ERC20Attributes_.symbolIrrevocable);
+
         // AccessControlUpgradeable inherits from ERC165Upgradeable
         __ERC165_init_unchained();
-        // AuthorizationModule inherits from AccessControlUpgradeable
-        __AccessControl_init_unchained();
-        __Pausable_init_unchained();
 
+        // Openzeppelin
+        __CMTAT_openzeppelin_init_unchained();
         /* Internal Modules */
-        __Enforcement_init_unchained();
-        /*
-        SnapshotModule:
-        Add these two calls in case you add the SnapshotModule
-            */
-        __SnapshotModuleBase_init_unchained();
-        __ERC20Snapshot_init_unchained();
-    
-        __Validation_init_unchained(engines_ .ruleEngine);
+       __CMTAT_internal_init_unchained();
 
-        /* Wrapper */
-        // AuthorizationModule_init_unchained is called firstly due to inheritance
-        __AuthorizationModule_init_unchained(admin, engines_ .authorizationEngine);
-        __ERC20BurnModule_init_unchained();
-        __ERC20MintModule_init_unchained();
-        // EnforcementModule_init_unchained is called before ValidationModule_init_unchained due to inheritance
-        __EnforcementModule_init_unchained();
-        __ERC20BaseModule_init_unchained(ERC20Attributes_.decimalsIrrevocable);
-        // PauseModule_init_unchained is called before ValidationModule_init_unchained due to inheritance
-        __PauseModule_init_unchained();
-        __ValidationModule_init_unchained();
-
-        /*
-        SnapshotModule:
-        Add this call in case you add the SnapshotModule
-        */
-        __ERC20SnasphotModule_init_unchained();
-        __DocumentModule_init_unchained(engines_ .documentEngine);
-        __DebtModule_init_unchained(engines_ .debtEngine);
-
-        /* Other modules */
-        __Base_init_unchained(baseModuleAttributes_.tokenId, baseModuleAttributes_.terms, baseModuleAttributes_.information);
+        /* Wrapper modules */
+        __CMTAT_modules_init_unchained(admin, ERC20Attributes_, baseModuleAttributes_, engines_ );
 
         /* own function */
         __CMTAT_init_unchained();
     }
 
-    function __CMTAT_init_unchained() internal onlyInitializing {
+    /*
+    * @dev OpenZeppelin
+    */
+    function __CMTAT_openzeppelin_init_unchained() internal virtual onlyInitializing {
+         // AuthorizationModule inherits from AccessControlUpgradeable
+        __AccessControl_init_unchained();
+        __Pausable_init_unchained();
+        // We don'use name and symbol set by the OpenZeppelin module
+        //__ERC20_init_unchained(ERC20Attributes_.name, ERC20Attributes_.symbol);
+    }
+
+
+
+    /*
+    * @dev CMTAT internal module
+    */
+    function __CMTAT_internal_init_unchained() internal virtual onlyInitializing {
+        __Enforcement_init_unchained();   
+    }
+
+    /*
+    * @dev CMTAT wrapper modules
+    */
+    function __CMTAT_modules_init_unchained(address admin, ICMTATConstructor.ERC20Attributes memory ERC20Attributes_, ICMTATConstructor.BaseModuleAttributes memory baseModuleAttributes_, ICMTATConstructor.Engine memory engines_ ) internal virtual onlyInitializing {
+        // AuthorizationModule_init_unchained is called firstly due to inheritance
+        __AuthorizationModule_init_unchained(admin);
+        __ERC20BurnModule_init_unchained();
+        __ERC20MintModule_init_unchained();
+        // EnforcementModule_init_unchained is called before ValidationModule_init_unchained due to inheritance
+        __EnforcementModule_init_unchained();
+        __ERC20BaseModule_init_unchained(ERC20Attributes_.decimalsIrrevocable, ERC20Attributes_.name, ERC20Attributes_.symbol);
+        // PauseModule_init_unchained is called before ValidationModule_init_unchained due to inheritance
+        __PauseModule_init_unchained();
+        __ValidationModule_init_unchained(engines_.ruleEngine);
+
+        __SnapshotModule_init_unchained(engines_.snapshotEngine);
+        __DocumentModule_init_unchained(engines_ .documentEngine);
+        __DebtModule_init_unchained(engines_ .debtEngine);
+
+        /* Other modules */
+        __Base_init_unchained(baseModuleAttributes_.tokenId, baseModuleAttributes_.terms, baseModuleAttributes_.information);
+    }
+
+    function __CMTAT_init_unchained() internal virtual onlyInitializing {
         // no variable to initialize
+        
     }
 
 
     /*//////////////////////////////////////////////////////////////
                             PUBLIC/EXTERNAL FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
+
+    /*//////////////////////////////////////////////////////////////
+                Override ERC20Upgradeable, ERC20BaseModule
     //////////////////////////////////////////////////////////////*/
 
     /**
@@ -150,6 +168,9 @@ abstract contract CMTAT_BASE is
         return ERC20BaseModule.decimals();
     }
 
+    /*
+    * @inheritdoc ERC20BaseModule
+    */
     function transferFrom(
         address sender,
         address recipient,
@@ -163,6 +184,27 @@ abstract contract CMTAT_BASE is
         return ERC20BaseModule.transferFrom(sender, recipient, amount);
     }
 
+
+    /**
+     * @notice Returns the name of the token.
+     */
+    function name() public virtual override(ERC20Upgradeable, ERC20BaseModule) view returns (string memory) {
+        return ERC20BaseModule.name();
+    }
+
+    /**
+     * @notice Returns the symbol of the token, usually a shorter version of the
+     * name.
+     */
+    function symbol() public virtual override(ERC20Upgradeable, ERC20BaseModule) view returns (string memory) {
+        return ERC20BaseModule.symbol();
+    }
+
+
+    /*//////////////////////////////////////////////////////////////
+                Functions requiring several modules
+    //////////////////////////////////////////////////////////////*/
+
     /**
     * @notice burn and mint atomically
     * @param from current token holder to burn tokens
@@ -174,7 +216,7 @@ abstract contract CMTAT_BASE is
     * - Input validation is also managed by the functions burn and mint
     * - You can mint more tokens than burnt
     */
-    function burnAndMint(address from, address to, uint256 amountToBurn, uint256 amountToMint, string calldata reason) public  {
+    function burnAndMint(address from, address to, uint256 amountToBurn, uint256 amountToMint, string calldata reason) public virtual  {
         burn(from, amountToBurn, reason);
         mint(to, amountToMint);
     }
@@ -190,16 +232,16 @@ abstract contract CMTAT_BASE is
         address from,
         address to,
         uint256 amount
-    ) internal override(ERC20Upgradeable) {
+    ) internal virtual override(ERC20Upgradeable) {
         if (!ValidationModule._operateOnTransfer(from, to, amount)) {
             revert Errors.CMTAT_InvalidTransfer(from, to, amount);
         }
-        /*
-        SnapshotModule:
-        Add this in case you add the SnapshotModule
-        We call the SnapshotModule only if the transfer is valid
-        */
-        ERC20SnapshotModuleInternal._snapshotUpdate(from, to);
+        // We check here the address of the snapshotEngine here because we don't want to read balance/totalSupply if there is no ruleEngine
+        ISnapshotEngine snapshotEngine = snapshotEngine();
+        // Required to be performed before the update
+        if(address(snapshotEngine) != address(0)){
+            snapshotEngine.operateOnTransfer(from, to, balanceOf(from), balanceOf(to), totalSupply());
+        }
         ERC20Upgradeable._update(from, to, amount);
     }
     /*//////////////////////////////////////////////////////////////
@@ -209,7 +251,7 @@ abstract contract CMTAT_BASE is
      * @dev This surcharge is not necessary if you do not use the MetaTxModule
      */
     function _msgSender()
-        internal
+        internal virtual
         view
         override(ERC2771ContextUpgradeable, ContextUpgradeable)
         returns (address sender)
@@ -220,7 +262,7 @@ abstract contract CMTAT_BASE is
     /**
      * @dev This surcharge is not necessary if you do not use the MetaTxModule
      */
-    function _contextSuffixLength() internal view 
+    function _contextSuffixLength() internal virtual view 
     override(ERC2771ContextUpgradeable, ContextUpgradeable)
     returns (uint256) {
          return ERC2771ContextUpgradeable._contextSuffixLength();
@@ -230,7 +272,7 @@ abstract contract CMTAT_BASE is
      * @dev This surcharge is not necessary if you do not use the MetaTxModule
      */
     function _msgData()
-        internal
+        internal virtual
         view
         override(ERC2771ContextUpgradeable, ContextUpgradeable)
         returns (bytes calldata)
